@@ -1,0 +1,27 @@
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Generated data and plots
+data/*.csv
+!data/sample_imu.csv
+*.png
+*.log
+
+# Arduino
+build/
+firmware/**/build/
+*.elf
+*.hex
+*.bin
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
