@@ -12,15 +12,15 @@
 Built-in IMU -> Arduino firmware -> USB serial -> CSV file -> Python analysis
 ```
 
-## Planned Sensor Integration
+## Next Milestone
 
-The next hardware stage adds MAX30102 red and infrared pulse measurements alongside the IMU fields:
+The combined logger uses the SparkFun MAX3010x library to read MAX30102 red and infrared measurements alongside the IMU fields:
 
 ```text
-time_ms,ppg_red,ppg_ir,ax,ay,az,gx,gy,gz,motion_mag,quality_flag
+time_ms,ppg_red,ppg_ir,ax,ay,az,gx,gy,gz,motion_mag
 ```
 
-The combined firmware currently uses dependency-free placeholders for the optical fields. Sensor initialization, acquisition, and quality logic remain planned work.
+This is the next PPG + IMU serial logging milestone. The implementation has not yet been validated on the target hardware, and signal-quality logic remains planned work.
 
 ## Planned Adaptive Policy
 

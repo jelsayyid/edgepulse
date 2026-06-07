@@ -17,6 +17,10 @@ def parse_args() -> argparse.Namespace:
         type=float,
         help="Optional logging duration in seconds.",
     )
+    parser.add_argument(
+        "--header",
+        help="Optional CSV header written before serial data.",
+    )
     args = parser.parse_args()
 
     if args.baud <= 0:
@@ -39,6 +43,10 @@ def main() -> None:
         with serial.Serial(args.port, args.baud, timeout=1) as port:
             with args.out.open("wb") as output:
                 print(f"Logging to {args.out}")
+                if args.header is not None:
+                    output.write(args.header.rstrip("\r\n").encode("utf-8") + b"\n")
+                    output.flush()
+
                 try:
                     while True:
                         if (

@@ -2,6 +2,8 @@
 
 `sample_imu.csv` is synthetic input for testing the analysis scripts without hardware.
 
-Place locally captured recordings in this directory if convenient. Generated CSV files are ignored by default so large or experimental logs are not committed accidentally.
+`combined_contact_motion_001.csv` is the first real combined PPG + IMU hardware capture. It includes no-finger, still-finger, motion/contact artifact, and still-finger recovery periods.
+
+`combined_contact_motion_001_labeled.csv` adds first-pass `NO_FINGER`, `CLEAN`, and `NOISY` signal-quality labels.
 
 Do not treat the synthetic values as measured hardware performance.

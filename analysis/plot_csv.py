@@ -36,13 +36,35 @@ def main() -> None:
 
     plot_groups = []
     if {"ax", "ay", "az"}.issubset(data.columns):
-        plot_groups.append(("Acceleration", ["ax", "ay", "az"], "Acceleration (g)"))
+        plot_groups.append(
+            ("Acceleration", ["ax", "ay", "az"], "Acceleration (g)", None)
+        )
     if "motion_mag" in data.columns:
-        plot_groups.append(("Motion magnitude", ["motion_mag"], "Magnitude (g)"))
+        plot_groups.append(
+            ("Motion magnitude", ["motion_mag"], "Magnitude (g)", None)
+        )
 
     ppg_columns = [name for name in ("ppg_red", "ppg_ir") if name in data.columns]
     if ppg_columns:
-        plot_groups.append(("Optical pulse", ppg_columns, "Sensor value"))
+        plot_groups.append(("Optical pulse", ppg_columns, "Sensor value", None))
+
+    if "signal_label" in data.columns:
+        signal_mapping = {"NO_FINGER": 0, "CLEAN": 1, "NOISY": 2}
+        data["signal_label_numeric"] = data["signal_label"].map(signal_mapping)
+        unknown_labels = data.loc[
+            data["signal_label_numeric"].isna(), "signal_label"
+        ].dropna()
+        if not unknown_labels.empty:
+            labels = ", ".join(sorted(unknown_labels.astype(str).unique()))
+            raise SystemExit(f"Unsupported signal labels: {labels}")
+        plot_groups.append(
+            (
+                "Signal quality",
+                ["signal_label_numeric"],
+                "Signal label",
+                signal_mapping,
+            )
+        )
 
     if not plot_groups:
         raise SystemExit("No supported signal columns found in the input CSV")
@@ -62,13 +84,25 @@ def main() -> None:
         squeeze=False,
     )
 
-    for axis, (title, columns, y_label) in zip(axes[:, 0], plot_groups):
+    for axis, (title, columns, y_label, category_mapping) in zip(
+        axes[:, 0], plot_groups
+    ):
         for column in columns:
-            axis.plot(x, data[column], label=column)
+            if category_mapping:
+                axis.step(x, data[column], where="post")
+            else:
+                axis.plot(x, data[column], label=column)
         axis.set_title(title)
         axis.set_ylabel(y_label)
         axis.grid(True, alpha=0.3)
-        axis.legend()
+        if category_mapping:
+            axis.set_yticks(
+                list(category_mapping.values()),
+                labels=list(category_mapping.keys()),
+            )
+            axis.set_ylim(-0.25, 2.25)
+        else:
+            axis.legend()
 
     axes[-1, 0].set_xlabel(x_label)
     figure.tight_layout()

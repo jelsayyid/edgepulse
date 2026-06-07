@@ -1,78 +1,99 @@
+#include <Wire.h>
 #include <Arduino_BMI270_BMM150.h>
+#include "MAX30105.h"
 #include <math.h>
 
-const unsigned long SAMPLE_INTERVAL_MS = 20;
-const unsigned long SERIAL_WAIT_MS = 2000;
+MAX30105 particleSensor;
 
-unsigned long nextSampleMs = 0;
+const unsigned long SAMPLE_INTERVAL_MS = 20;
+unsigned long lastSample = 0;
+
+bool imuOk = false;
+bool ppgOk = false;
 
 void setup() {
   Serial.begin(115200);
 
-  unsigned long waitStart = millis();
-  while (!Serial && millis() - waitStart < SERIAL_WAIT_MS) {
+  unsigned long start = millis();
+  while (!Serial && millis() - start < 3000) {}
+
+  Wire.begin();
+
+  imuOk = IMU.begin();
+  if (!imuOk) {
+    Serial.println("IMU_INIT_FAILED");
   }
 
-  if (!IMU.begin()) {
-    Serial.println("ERROR: IMU initialization failed");
-    while (true) {
-      delay(1000);
-    }
+  ppgOk = particleSensor.begin(Wire, I2C_SPEED_STANDARD);
+  if (!ppgOk) {
+    Serial.println("MAX30102_INIT_FAILED");
+  } else {
+    byte ledBrightness = 0x1F;
+    byte sampleAverage = 4;
+    byte ledMode = 2;
+    int sampleRate = 50;
+    int pulseWidth = 411;
+    int adcRange = 4096;
+
+    particleSensor.setup(
+      ledBrightness,
+      sampleAverage,
+      ledMode,
+      sampleRate,
+      pulseWidth,
+      adcRange
+    );
   }
 
-  // TODO: Initialize the MAX30102 after selecting a sensor library.
-  Serial.println("time_ms,ppg_red,ppg_ir,ax,ay,az,gx,gy,gz,motion_mag,quality_flag");
-  nextSampleMs = millis();
+  if (imuOk && ppgOk) {
+    Serial.println("time_ms,ppg_red,ppg_ir,ax,ay,az,gx,gy,gz,motion_mag");
+  }
 }
 
 void loop() {
-  unsigned long now = millis();
-  if ((long)(now - nextSampleMs) < 0) {
+  if (!imuOk || !ppgOk) {
+    delay(1000);
     return;
   }
 
-  if (!IMU.accelerationAvailable() || !IMU.gyroscopeAvailable()) {
+  if (millis() - lastSample < SAMPLE_INTERVAL_MS) {
     return;
   }
+  lastSample = millis();
 
-  float ax;
-  float ay;
-  float az;
-  float gx;
-  float gy;
-  float gz;
+  long red = particleSensor.getRed();
+  long ir = particleSensor.getIR();
 
-  IMU.readAcceleration(ax, ay, az);
-  IMU.readGyroscope(gx, gy, gz);
+  float ax = 0, ay = 0, az = 0;
+  float gx = 0, gy = 0, gz = 0;
+
+  if (IMU.accelerationAvailable()) {
+    IMU.readAcceleration(ax, ay, az);
+  }
+
+  if (IMU.gyroscopeAvailable()) {
+    IMU.readGyroscope(gx, gy, gz);
+  }
 
   float motionMag = sqrt(ax * ax + ay * ay + az * az);
 
-  // TODO: Replace placeholders with MAX30102 samples and a derived quality flag.
-  unsigned long ppgRed = 0;
-  unsigned long ppgIr = 0;
-  int qualityFlag = 0;
-
-  Serial.print(now);
-  Serial.print(',');
-  Serial.print(ppgRed);
-  Serial.print(',');
-  Serial.print(ppgIr);
-  Serial.print(',');
+  Serial.print(millis());
+  Serial.print(",");
+  Serial.print(red);
+  Serial.print(",");
+  Serial.print(ir);
+  Serial.print(",");
   Serial.print(ax, 6);
-  Serial.print(',');
+  Serial.print(",");
   Serial.print(ay, 6);
-  Serial.print(',');
+  Serial.print(",");
   Serial.print(az, 6);
-  Serial.print(',');
+  Serial.print(",");
   Serial.print(gx, 6);
-  Serial.print(',');
+  Serial.print(",");
   Serial.print(gy, 6);
-  Serial.print(',');
+  Serial.print(",");
   Serial.print(gz, 6);
-  Serial.print(',');
-  Serial.print(motionMag, 6);
-  Serial.print(',');
-  Serial.println(qualityFlag);
-
-  nextSampleMs = now + SAMPLE_INTERVAL_MS;
+  Serial.print(",");
+  Serial.println(motionMag, 6);
 }

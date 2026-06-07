@@ -9,7 +9,14 @@ __pycache__/
 # Generated data and plots
 data/*.csv
 !data/sample_imu.csv
+!data/sample_imu_scored.csv
+!data/sample_imu_axes_only.csv
+!data/sample_imu_axes_scored.csv
+!data/combined_contact_motion_001.csv
+!data/combined_contact_motion_001_labeled.csv
 *.png
+!data/combined_contact_motion_001.png
+!data/combined_contact_motion_001_labeled.png
 *.log
 
 # Arduino
