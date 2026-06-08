@@ -15,7 +15,15 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import pandas as pd
+
+
+SIGNAL_COLORS = {
+    "NO_FINGER": "#9ca3af",
+    "CLEAN": "#22c55e",
+    "NOISY": "#ef4444",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -30,40 +38,80 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def shade_signal_regions(axis, x, labels) -> None:
+    if labels.empty:
+        return
+
+    unknown = sorted(set(labels.dropna()) - set(SIGNAL_COLORS))
+    if unknown:
+        raise SystemExit(f"Unsupported signal labels: {', '.join(unknown)}")
+
+    x_values = list(x)
+    if len(x_values) == 1:
+        boundaries = [x_values[0] - 0.5, x_values[0] + 0.5]
+    else:
+        midpoints = [
+            (left + right) / 2
+            for left, right in zip(x_values[:-1], x_values[1:])
+        ]
+        boundaries = [
+            x_values[0] - (x_values[1] - x_values[0]) / 2,
+            *midpoints,
+            x_values[-1] + (x_values[-1] - x_values[-2]) / 2,
+        ]
+
+    start_index = 0
+    label_values = list(labels)
+    for index in range(1, len(label_values) + 1):
+        if index == len(label_values) or label_values[index] != label_values[start_index]:
+            label = label_values[start_index]
+            if label in SIGNAL_COLORS:
+                axis.axvspan(
+                    boundaries[start_index],
+                    boundaries[index],
+                    color=SIGNAL_COLORS[label],
+                    alpha=0.14,
+                )
+            start_index = index
+
+    quality_handles = [
+        Patch(facecolor=color, alpha=0.25, label=label)
+        for label, color in SIGNAL_COLORS.items()
+    ]
+    signal_legend = axis.legend(loc="upper left")
+    axis.add_artist(signal_legend)
+    axis.legend(
+        handles=quality_handles,
+        title="Signal quality",
+        loc="upper right",
+    )
+
+
 def main() -> None:
     args = parse_args()
     data = pd.read_csv(args.input)
 
     plot_groups = []
-    if {"ax", "ay", "az"}.issubset(data.columns):
-        plot_groups.append(
-            ("Acceleration", ["ax", "ay", "az"], "Acceleration (g)", None)
-        )
-    if "motion_mag" in data.columns:
-        plot_groups.append(
-            ("Motion magnitude", ["motion_mag"], "Magnitude (g)", None)
-        )
-
     ppg_columns = [name for name in ("ppg_red", "ppg_ir") if name in data.columns]
     if ppg_columns:
-        plot_groups.append(("Optical pulse", ppg_columns, "Sensor value", None))
+        plot_groups.append(("Optical pulse", ppg_columns, "Sensor value", 4.0))
 
-    if "signal_label" in data.columns:
-        signal_mapping = {"NO_FINGER": 0, "CLEAN": 1, "NOISY": 2}
-        data["signal_label_numeric"] = data["signal_label"].map(signal_mapping)
-        unknown_labels = data.loc[
-            data["signal_label_numeric"].isna(), "signal_label"
-        ].dropna()
-        if not unknown_labels.empty:
-            labels = ", ".join(sorted(unknown_labels.astype(str).unique()))
-            raise SystemExit(f"Unsupported signal labels: {labels}")
+    if "dynamic_motion" in data.columns:
         plot_groups.append(
-            (
-                "Signal quality",
-                ["signal_label_numeric"],
-                "Signal label",
-                signal_mapping,
-            )
+            ("Dynamic motion", ["dynamic_motion"], "Deviation (g)", 2.0)
+        )
+    elif "motion_score" in data.columns:
+        plot_groups.append(
+            ("Motion score", ["motion_score"], "Motion score", 2.0)
+        )
+    elif "motion_mag" in data.columns:
+        plot_groups.append(
+            ("Motion magnitude", ["motion_mag"], "Magnitude (g)", 2.0)
+        )
+
+    if {"ax", "ay", "az"}.issubset(data.columns):
+        plot_groups.append(
+            ("Acceleration", ["ax", "ay", "az"], "Acceleration (g)", 1.8)
         )
 
     if not plot_groups:
@@ -82,27 +130,19 @@ def main() -> None:
         figsize=(10, 3.2 * len(plot_groups)),
         sharex=True,
         squeeze=False,
+        gridspec_kw={"height_ratios": [group[3] for group in plot_groups]},
     )
 
-    for axis, (title, columns, y_label, category_mapping) in zip(
-        axes[:, 0], plot_groups
-    ):
+    for axis, (title, columns, y_label, _) in zip(axes[:, 0], plot_groups):
         for column in columns:
-            if category_mapping:
-                axis.step(x, data[column], where="post")
-            else:
-                axis.plot(x, data[column], label=column)
+            axis.plot(x, data[column], label=column)
         axis.set_title(title)
         axis.set_ylabel(y_label)
         axis.grid(True, alpha=0.3)
-        if category_mapping:
-            axis.set_yticks(
-                list(category_mapping.values()),
-                labels=list(category_mapping.keys()),
-            )
-            axis.set_ylim(-0.25, 2.25)
-        else:
-            axis.legend()
+        axis.legend()
+
+    if ppg_columns and "signal_label" in data.columns:
+        shade_signal_regions(axes[0, 0], x, data["signal_label"])
 
     axes[-1, 0].set_xlabel(x_label)
     figure.tight_layout()

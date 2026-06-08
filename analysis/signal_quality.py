@@ -11,13 +11,6 @@ REQUIRED_COLUMNS = {
     "time_ms",
     "ppg_red",
     "ppg_ir",
-    "ax",
-    "ay",
-    "az",
-    "gx",
-    "gy",
-    "gz",
-    "motion_mag",
 }
 
 
@@ -72,13 +65,26 @@ def main() -> None:
 
     rolling_mean = rolling_ir.mean()
     rolling_std = rolling_ir.std()
-    data["ppg_noise_score"] = (rolling_std / rolling_mean).fillna(0.0)
-    data["motion_score"] = (
-        data["motion_mag"]
-        .rolling(window=args.window, min_periods=2)
-        .std()
-        .fillna(0.0)
-    )
+    rolling_variation = (rolling_std / rolling_mean).fillna(0.0)
+    sudden_change = (finger_ir.diff().abs() / rolling_mean).fillna(0.0)
+    sudden_change = sudden_change.rolling(window=3, min_periods=1).max()
+    data["ppg_noise_score"] = pd.concat(
+        [rolling_variation, sudden_change], axis=1
+    ).max(axis=1)
+
+    if "motion_mag" in data.columns:
+        motion_mean = data["motion_mag"].rolling(
+            window=args.window, min_periods=1
+        ).mean()
+        data["dynamic_motion"] = (data["motion_mag"] - motion_mean).abs()
+        data["motion_score"] = (
+            data["dynamic_motion"]
+            .rolling(window=args.window, min_periods=2)
+            .std()
+            .fillna(0.0)
+        )
+    else:
+        data["motion_score"] = 0.0
 
     noisy = finger_detected & (
         (data["ppg_noise_score"] > args.noise_threshold)
