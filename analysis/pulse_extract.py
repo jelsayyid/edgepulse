@@ -81,7 +81,7 @@ def peak_candidates(values: np.ndarray) -> np.ndarray:
         return np.array([], dtype=int)
 
     if scipy_find_peaks is not None:
-        prominence = max(float(np.nanstd(values)) * 0.1, np.finfo(float).eps)
+        prominence = max(float(np.nanstd(values)) * 0.25, np.finfo(float).eps)
         peaks, _ = scipy_find_peaks(values, prominence=prominence)
         return peaks
 
@@ -132,29 +132,43 @@ def main() -> None:
     if missing:
         raise SystemExit(f"Missing required columns: {', '.join(sorted(missing))}")
 
-    time_s = data["time_ms"].to_numpy(dtype=float) / 1000.0
+    time_s = (
+        data["time_ms"].to_numpy(dtype=float) - float(data["time_ms"].iloc[0])
+    ) / 1000.0
     if len(time_s) > 1 and np.any(np.diff(time_s) <= 0):
         raise SystemExit("time_ms must be strictly increasing")
-
-    baseline = data["ppg_ir"].rolling(
-        window=args.window,
-        center=True,
-        min_periods=1,
-    ).mean()
-    data["ppg_ir_detrended"] = data["ppg_ir"] - baseline
 
     if "signal_label" in data.columns:
         valid_rows = data["signal_label"].eq("CLEAN").to_numpy()
     else:
         valid_rows = np.ones(len(data), dtype=bool)
 
-    detrended = data["ppg_ir_detrended"].to_numpy(dtype=float)
+    detrended = np.full(len(data), np.nan)
     detected_peaks = []
     interval_by_peak = {}
+    plot_regions = []
 
     for start, end in contiguous_regions(valid_rows):
-        local_values = detrended[start : end + 1]
-        candidates = (peak_candidates(local_values) + start).tolist()
+        local_signal = data.loc[start:end, "ppg_ir"].astype(float)
+        local_baseline = local_signal.rolling(
+            window=args.window,
+            center=True,
+            min_periods=1,
+        ).mean()
+        detrended[start : end + 1] = (local_signal - local_baseline).to_numpy()
+
+        edge_trim = min(
+            int(round(args.window * 0.75)),
+            max((end - start + 1) // 4, 0),
+        )
+        usable_start = start + edge_trim
+        usable_end = end - edge_trim
+        if usable_end - usable_start < 2:
+            continue
+
+        plot_regions.append((usable_start, usable_end))
+        local_values = detrended[usable_start : usable_end + 1]
+        candidates = (peak_candidates(local_values) + usable_start).tolist()
         region_peaks = enforce_spacing(
             candidates,
             time_s,
@@ -169,9 +183,10 @@ def main() -> None:
             if args.min_distance_s <= interval <= args.max_distance_s:
                 interval_by_peak[current] = interval
 
+    data["ppg_ir_detrended"] = detrended
     detected_peaks = sorted(set(detected_peaks))
     intervals = np.array(list(interval_by_peak.values()), dtype=float)
-    median_bpm = 60.0 / np.median(intervals) if len(intervals) else None
+    median_bpm = 60.0 / np.median(intervals) if len(intervals) >= 3 else None
 
     data["pulse_peak"] = 0
     data["beat_interval_s"] = np.nan
@@ -188,28 +203,54 @@ def main() -> None:
     else:
         print(f"Estimated median BPM: {median_bpm:.1f}")
 
-    figure, axis = plt.subplots(figsize=(11, 5))
-    axis.plot(time_s, detrended, label="ppg_ir_detrended", linewidth=1.2)
-    if detected_peaks:
-        axis.scatter(
-            time_s[detected_peaks],
-            detrended[detected_peaks],
-            color="#dc2626",
-            marker="x",
-            s=42,
-            label="Detected peak",
-            zorder=3,
-        )
-    axis.axhline(0, color="#6b7280", linewidth=0.8, alpha=0.6)
-    axis.set_title(
-        "Detrended infrared pulse"
-        if median_bpm is None
-        else f"Detrended infrared pulse, median {median_bpm:.1f} BPM"
+    if not plot_regions:
+        raise SystemExit("No usable rows available for pulse extraction")
+
+    figure, axes = plt.subplots(
+        len(plot_regions),
+        1,
+        figsize=(11, 3.6 * len(plot_regions)),
+        squeeze=False,
     )
-    axis.set_xlabel("Time (s)")
-    axis.set_ylabel("Detrended IR value")
-    axis.grid(True, alpha=0.3)
-    axis.legend()
+    for region_number, ((start, end), axis) in enumerate(
+        zip(plot_regions, axes[:, 0]),
+        start=1,
+    ):
+        region_slice = slice(start, end + 1)
+        axis.plot(
+            time_s[region_slice],
+            detrended[region_slice],
+            label="ppg_ir_detrended",
+            linewidth=1.2,
+        )
+        region_peaks = [
+            index for index in detected_peaks if start <= index <= end
+        ]
+        if region_peaks:
+            axis.scatter(
+                time_s[region_peaks],
+                detrended[region_peaks],
+                color="#dc2626",
+                marker="x",
+                s=42,
+                label="Detected peak",
+                zorder=3,
+            )
+        axis.axhline(0, color="#6b7280", linewidth=0.8, alpha=0.6)
+        interval_name = (
+            "Clean interval" if "signal_label" in data.columns else "Pulse interval"
+        )
+        axis.set_title(f"{interval_name} {region_number}")
+        axis.set_ylabel("Detrended IR")
+        axis.grid(True, alpha=0.3)
+        axis.legend()
+
+    axes[-1, 0].set_xlabel("Elapsed time (s)")
+    figure.suptitle(
+        "Candidate infrared pulse waveform"
+        if median_bpm is None
+        else f"Candidate infrared pulse waveform, median {median_bpm:.1f} BPM"
+    )
     figure.tight_layout()
 
     args.out_plot.parent.mkdir(parents=True, exist_ok=True)

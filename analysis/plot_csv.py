@@ -118,8 +118,8 @@ def main() -> None:
         raise SystemExit("No supported signal columns found in the input CSV")
 
     if "time_ms" in data.columns:
-        x = data["time_ms"] / 1000.0
-        x_label = "Time (s)"
+        x = (data["time_ms"] - data["time_ms"].iloc[0]) / 1000.0
+        x_label = "Elapsed time (s)"
     else:
         x = data.index
         x_label = "Sample"

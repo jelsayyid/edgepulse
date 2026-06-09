@@ -39,6 +39,10 @@ def parse_args() -> argparse.Namespace:
         default=0.01,
         help="Maximum clean motion score.",
     )
+    parser.add_argument(
+        "--phase-labels",
+        help="Known elapsed-time phases, for example 0:NO_FINGER,15:CLEAN.",
+    )
     args = parser.parse_args()
 
     if args.window <= 0:
@@ -49,6 +53,26 @@ def parse_args() -> argparse.Namespace:
         parser.error("quality thresholds must be non-negative")
 
     return args
+
+
+def parse_phase_labels(value: str) -> list[tuple[float, str]]:
+    allowed = {"NO_FINGER", "CLEAN", "NOISY"}
+    phases = []
+
+    for item in value.split(","):
+        try:
+            start_text, label = item.strip().split(":", maxsplit=1)
+            start = float(start_text)
+        except ValueError as exc:
+            raise SystemExit("Invalid --phase-labels format") from exc
+        if start < 0 or label not in allowed:
+            raise SystemExit("Invalid --phase-labels value")
+        phases.append((start, label))
+
+    phases.sort()
+    if not phases or phases[0][0] != 0:
+        raise SystemExit("--phase-labels must begin at 0 seconds")
+    return phases
 
 
 def main() -> None:
@@ -95,6 +119,12 @@ def main() -> None:
         ["NO_FINGER", "NOISY"],
         default="CLEAN",
     )
+
+    if args.phase_labels:
+        phases = parse_phase_labels(args.phase_labels)
+        elapsed_s = (data["time_ms"] - data["time_ms"].iloc[0]) / 1000.0
+        for start, label in phases:
+            data.loc[elapsed_s >= start, "signal_label"] = label
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     data.to_csv(args.out, index=False)
