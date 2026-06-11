@@ -14,6 +14,8 @@ data/*.csv
 !data/sample_imu_axes_scored.csv
 !data/combined_contact_motion_001.csv
 !data/combined_contact_motion_001_labeled.csv
+!data/combined_contact_motion_001_pulse.csv
+!data/capture_protocols.csv
 *.png
 !data/combined_contact_motion_001.png
 !data/combined_contact_motion_001_labeled.png

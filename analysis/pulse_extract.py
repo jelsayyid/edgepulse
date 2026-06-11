@@ -49,6 +49,12 @@ def parse_args() -> argparse.Namespace:
         default=1.5,
         help="Maximum plausible beat spacing in seconds.",
     )
+    parser.add_argument(
+        "--min-clean-duration-s",
+        type=float,
+        default=8.0,
+        help="Minimum clean interval duration in seconds.",
+    )
     args = parser.parse_args()
 
     if args.window <= 0:
@@ -57,6 +63,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("beat spacing limits must be positive")
     if args.max_distance_s <= args.min_distance_s:
         parser.error("--max-distance-s must exceed --min-distance-s")
+    if args.min_clean_duration_s <= 0:
+        parser.error("--min-clean-duration-s must be positive")
 
     return args
 
@@ -138,7 +146,9 @@ def main() -> None:
     if len(time_s) > 1 and np.any(np.diff(time_s) <= 0):
         raise SystemExit("time_ms must be strictly increasing")
 
-    if "signal_label" in data.columns:
+    if "protocol_label" in data.columns:
+        valid_rows = data["protocol_label"].eq("CLEAN").to_numpy()
+    elif "signal_label" in data.columns:
         valid_rows = data["signal_label"].eq("CLEAN").to_numpy()
     else:
         valid_rows = np.ones(len(data), dtype=bool)
@@ -156,8 +166,18 @@ def main() -> None:
     detected_peaks = []
     interval_by_peak = {}
     plot_regions = []
+    accepted_intervals = 0
+    clean_seconds_used = 0.0
+    sample_duration = (
+        float(np.median(np.diff(time_s))) if len(time_s) > 1 else 0.0
+    )
 
     for start, end in contiguous_regions(valid_rows):
+        clean_duration = time_s[end] - time_s[start] + sample_duration
+        if clean_duration < args.min_clean_duration_s:
+            continue
+        accepted_intervals += 1
+
         edge_trim = min(
             int(round(args.window * 0.75)),
             max((end - start + 1) // 4, 0),
@@ -168,6 +188,9 @@ def main() -> None:
             continue
 
         plot_regions.append((usable_start, usable_end))
+        clean_seconds_used += (
+            time_s[usable_end] - time_s[usable_start] + sample_duration
+        )
         local_values = detrended[usable_start : usable_end + 1]
         candidates = (peak_candidates(local_values) + usable_start).tolist()
         region_peaks = enforce_spacing(
@@ -198,11 +221,13 @@ def main() -> None:
         data.loc[index, "beat_interval_s"] = interval
         data.loc[index, "instant_bpm"] = 60.0 / interval
 
-    print(f"Detected beats: {len(detected_peaks)}")
+    print(f"Clean seconds used: {clean_seconds_used:.1f}")
+    print(f"Accepted clean intervals: {accepted_intervals}")
+    print(f"Detected peaks: {len(detected_peaks)}")
     if median_bpm is None:
-        print("Estimated median BPM: unavailable")
+        print("Candidate median BPM: unavailable")
     else:
-        print(f"Estimated median BPM: {median_bpm:.1f}")
+        print(f"Candidate median BPM: {median_bpm:.1f}")
 
     if not plot_regions:
         raise SystemExit("No usable rows available for pulse extraction")
@@ -238,8 +263,17 @@ def main() -> None:
                 zorder=3,
             )
         axis.axhline(0, color="#6b7280", linewidth=0.8, alpha=0.6)
+        visible_values = detrended[region_slice]
+        lower, upper = np.nanpercentile(visible_values, [1, 99])
+        if lower == upper:
+            padding = max(abs(lower) * 0.1, 1.0)
+        else:
+            padding = (upper - lower) * 0.1
+        axis.set_ylim(lower - padding, upper + padding)
         interval_name = (
-            "Clean interval" if "signal_label" in data.columns else "Pulse interval"
+            "Clean interval"
+            if "signal_label" in data.columns or "protocol_label" in data.columns
+            else "Pulse interval"
         )
         axis.set_title(f"{interval_name} {region_number}")
         axis.set_ylabel("Detrended IR")
@@ -248,11 +282,11 @@ def main() -> None:
 
     axes[-1, 0].set_xlabel("Elapsed time (s)")
     figure.suptitle(
-        "Candidate infrared pulse waveform"
+        "Infrared pulse waveform"
         if median_bpm is None
-        else f"Candidate infrared pulse waveform, median {median_bpm:.1f} BPM"
+        else f"Infrared pulse waveform, candidate median BPM {median_bpm:.1f}"
     )
-    figure.tight_layout()
+    figure.tight_layout(rect=(0, 0, 1, 0.96))
 
     args.out_plot.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(args.out_plot, dpi=150)

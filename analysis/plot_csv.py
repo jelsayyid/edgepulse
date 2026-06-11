@@ -121,7 +121,7 @@ def main() -> None:
 
     if {"ax", "ay", "az"}.issubset(data.columns):
         plot_groups.append(
-            ("Acceleration", ["ax", "ay", "az"], "Acceleration (g)", 1.8)
+            ("Acceleration", ["ax", "ay", "az"], "Acceleration (g)", 1.5)
         )
 
     if not plot_groups:
@@ -141,6 +141,7 @@ def main() -> None:
         sharex=True,
         squeeze=False,
         gridspec_kw={"height_ratios": [group[3] for group in plot_groups]},
+        layout="constrained",
     )
 
     for axis, (title, columns, y_label, _) in zip(axes[:, 0], plot_groups):
@@ -151,19 +152,17 @@ def main() -> None:
         axis.grid(True, alpha=0.3)
         axis.legend()
 
-    if "signal_label" in data.columns:
-        if ppg_columns:
-            shade_signal_regions(axes[0, 0], x, data["signal_label"])
-        if "ppg_ir_detrended" in data.columns:
-            detrended_index = 1 if ppg_columns else 0
-            shade_signal_regions(
-                axes[detrended_index, 0],
-                x,
-                data["signal_label"],
-            )
+    label_column = (
+        "protocol_label"
+        if "protocol_label" in data.columns
+        else "signal_label"
+        if "signal_label" in data.columns
+        else None
+    )
+    if ppg_columns and label_column:
+        shade_signal_regions(axes[0, 0], x, data[label_column])
 
     axes[-1, 0].set_xlabel(x_label)
-    figure.tight_layout()
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(args.out, dpi=150)
