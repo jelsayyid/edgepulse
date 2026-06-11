@@ -143,20 +143,21 @@ def main() -> None:
     else:
         valid_rows = np.ones(len(data), dtype=bool)
 
-    detrended = np.full(len(data), np.nan)
+    if "ppg_ir_detrended" in data.columns:
+        detrended = data["ppg_ir_detrended"].to_numpy(dtype=float).copy()
+    else:
+        baseline = data["ppg_ir"].rolling(
+            window=args.window,
+            center=True,
+            min_periods=1,
+        ).mean()
+        detrended = (data["ppg_ir"] - baseline).to_numpy(dtype=float)
+
     detected_peaks = []
     interval_by_peak = {}
     plot_regions = []
 
     for start, end in contiguous_regions(valid_rows):
-        local_signal = data.loc[start:end, "ppg_ir"].astype(float)
-        local_baseline = local_signal.rolling(
-            window=args.window,
-            center=True,
-            min_periods=1,
-        ).mean()
-        detrended[start : end + 1] = (local_signal - local_baseline).to_numpy()
-
         edge_trim = min(
             int(round(args.window * 0.75)),
             max((end - start + 1) // 4, 0),
@@ -188,11 +189,11 @@ def main() -> None:
     intervals = np.array(list(interval_by_peak.values()), dtype=float)
     median_bpm = 60.0 / np.median(intervals) if len(intervals) >= 3 else None
 
-    data["pulse_peak"] = 0
+    data["is_peak"] = 0
     data["beat_interval_s"] = np.nan
     data["instant_bpm"] = np.nan
     if detected_peaks:
-        data.loc[detected_peaks, "pulse_peak"] = 1
+        data.loc[detected_peaks, "is_peak"] = 1
     for index, interval in interval_by_peak.items():
         data.loc[index, "beat_interval_s"] = interval
         data.loc[index, "instant_bpm"] = 60.0 / interval

@@ -6,4 +6,8 @@
 
 `combined_contact_motion_001_labeled.csv` adds phase-aligned `NO_FINGER`, `CLEAN`, and `NOISY` signal-quality labels.
 
+`ppg_red` and `ppg_ir` are raw optical sensor counts, not heart rate. BPM is estimated later from peaks in the detrended infrared waveform.
+
+`motion_mag` includes gravity and remains near 1 g while the board is still. `dynamic_motion` measures change relative to a rolling baseline and better reflects movement.
+
 Do not treat the synthetic values as measured hardware performance.

@@ -84,6 +84,15 @@ def main() -> None:
         raise SystemExit(f"Missing required columns: {', '.join(sorted(missing))}")
 
     finger_detected = data["ppg_ir"] >= args.finger_threshold
+    ir_mean = data["ppg_ir"].rolling(
+        window=args.window, center=True, min_periods=1
+    ).mean()
+    red_mean = data["ppg_red"].rolling(
+        window=args.window, center=True, min_periods=1
+    ).mean()
+    data["ppg_ir_detrended"] = data["ppg_ir"] - ir_mean
+    data["ppg_red_detrended"] = data["ppg_red"] - red_mean
+
     finger_ir = data["ppg_ir"].where(finger_detected)
     rolling_ir = finger_ir.rolling(window=args.window, min_periods=2)
 
@@ -98,21 +107,22 @@ def main() -> None:
 
     if "motion_mag" in data.columns:
         motion_mean = data["motion_mag"].rolling(
-            window=args.window, min_periods=1
+            window=args.window, center=True, min_periods=1
         ).mean()
         data["dynamic_motion"] = (data["motion_mag"] - motion_mean).abs()
         data["motion_score"] = (
             data["dynamic_motion"]
-            .rolling(window=args.window, min_periods=2)
-            .std()
+            .rolling(window=args.window, min_periods=1)
+            .mean()
             .fillna(0.0)
         )
     else:
+        data["dynamic_motion"] = 0.0
         data["motion_score"] = 0.0
 
     noisy = finger_detected & (
         (data["ppg_noise_score"] > args.noise_threshold)
-        | (data["motion_score"] > args.motion_threshold)
+        | (data["dynamic_motion"] > args.motion_threshold)
     )
     data["signal_label"] = np.select(
         [~finger_detected, noisy],

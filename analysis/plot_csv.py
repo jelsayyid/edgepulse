@@ -94,7 +94,17 @@ def main() -> None:
     plot_groups = []
     ppg_columns = [name for name in ("ppg_red", "ppg_ir") if name in data.columns]
     if ppg_columns:
-        plot_groups.append(("Optical pulse", ppg_columns, "Sensor value", 4.0))
+        plot_groups.append(("Raw optical signal", ppg_columns, "Sensor count", 4.0))
+
+    if "ppg_ir_detrended" in data.columns:
+        plot_groups.append(
+            (
+                "Detrended infrared signal",
+                ["ppg_ir_detrended"],
+                "Detrended count",
+                2.5,
+            )
+        )
 
     if "dynamic_motion" in data.columns:
         plot_groups.append(
@@ -141,8 +151,16 @@ def main() -> None:
         axis.grid(True, alpha=0.3)
         axis.legend()
 
-    if ppg_columns and "signal_label" in data.columns:
-        shade_signal_regions(axes[0, 0], x, data["signal_label"])
+    if "signal_label" in data.columns:
+        if ppg_columns:
+            shade_signal_regions(axes[0, 0], x, data["signal_label"])
+        if "ppg_ir_detrended" in data.columns:
+            detrended_index = 1 if ppg_columns else 0
+            shade_signal_regions(
+                axes[detrended_index, 0],
+                x,
+                data["signal_label"],
+            )
 
     axes[-1, 0].set_xlabel(x_label)
     figure.tight_layout()

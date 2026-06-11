@@ -17,6 +17,7 @@ data/*.csv
 *.png
 !data/combined_contact_motion_001.png
 !data/combined_contact_motion_001_labeled.png
+!data/combined_contact_motion_001_pulse.png
 *.log
 
 # Arduino
