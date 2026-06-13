@@ -30,7 +30,7 @@ time_ms,ax,ay,az,gx,gy,gz,motion_mag
 
 ## Next Milestone
 
-`firmware/edgepulse_combined_logger/edgepulse_combined_logger.ino` reads MAX30102 red and infrared values with synchronized acceleration and gyroscope data at roughly 50 Hz. This combined logger is an initial implementation and has not yet been validated on the target hardware.
+`firmware/edgepulse_combined_logger/edgepulse_combined_logger.ino` reads MAX30102 red and infrared FIFO samples at 100 Hz and reuses the latest available acceleration and gyroscope values for each CSV row. This combined logger has not yet been validated at the target rate on the hardware.
 
 Connect MAX30102 `VIN` to `3.3V`, `GND` to `GND`, `SDA` to `SDA/A4`, and `SCL` to `SCL/A5`. Leave `INT`, `RD`, and `IRD` unconnected.
 
@@ -59,6 +59,14 @@ python analysis/serial_logger.py --port COM5 --out data/imu_log.csv --duration 6
 ```
 
 Omit `--duration` to log until `Ctrl+C`.
+
+Check the effective rate after each combined capture:
+
+```powershell
+python analysis/check_capture.py --input data/combined_capture.csv
+```
+
+Pulse extraction needs at least 20-25 Hz for useful waveform inspection. Target 25 Hz or higher in measured captures, preferably near 50 Hz.
 
 ## Plot Sample Data
 

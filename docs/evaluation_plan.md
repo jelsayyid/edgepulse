@@ -20,6 +20,8 @@ After MAX30102 integration, collect:
 
 Use the synchronized IMU measurements to examine whether motion explains optical signal degradation.
 
+Run `python analysis/check_capture.py --input <capture.csv>` after each capture. Pulse extraction requires at least 20-25 Hz for useful waveform inspection; prefer a measured rate near 50 Hz or higher.
+
 ## Metrics
 
 - Valid sample count
